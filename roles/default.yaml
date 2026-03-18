@@ -1,0 +1,16 @@
+# Default role - baseline for all agents
+# Other roles can inherit from this
+
+name: default
+prompt: prompts/default.md
+context: contexts/default.yaml
+
+# Tools available to this role
+tools:
+  builtin:
+    - bash
+    - read_file
+    - write_file
+    - list_files
+    - task_complete
+  custom: []
