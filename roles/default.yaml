@@ -5,12 +5,9 @@ name: default
 prompt: prompts/default.md
 context: contexts/default.yaml
 
-# Tools available to this role
+# Evo tools to load (runtime builtins bash + spawn are always available)
 tools:
-  builtin:
-    - bash
-    - read_file
-    - write_file
-    - list_files
-    - task_complete
-  custom: []
+  - read_file
+  - write_file
+  - list_files
+  - task_complete
