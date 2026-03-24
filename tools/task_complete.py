@@ -10,12 +10,12 @@ from palimpsest.runtime.tools import tool, ToolResult
 
 
 @tool
-def task_complete(summary: str, status: str = "success") -> ToolResult:
+def task_complete(summary: str, status: str = "complete") -> ToolResult:
     """Signal that the task is complete. Provide a summary and status.
 
     Args:
         summary: Brief summary of what was accomplished.
-        status: Whether the task was fully or partially completed ('success' or 'partial').
+        status: One of complete, failed, in_progress, blocked, needs_review.
     """
     return ToolResult(
         success=True,

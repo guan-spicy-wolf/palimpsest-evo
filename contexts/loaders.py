@@ -9,6 +9,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from yoitsu_contracts.client import EventEmitter
+
+from palimpsest.config import JobConfig
 from palimpsest.runtime.contexts import context_provider
 
 
@@ -69,3 +72,38 @@ def version_history(description: str = "Version History", limit: int = 5) -> str
     # A placeholder implementation. In a real scenario, this might query the Supervisor
     # or the git history of the evo repository.
     return f"## {description}\n\n(Version history tracking currently delegating to supervisor)"
+
+
+@context_provider("join_context")
+def join_context(job_config: JobConfig, description: str = "Join Context") -> str:
+    join = job_config.context.join
+    if join is None or not join.child_task_ids:
+        return ""
+
+    emitter = EventEmitter(job_config.eventstore)
+    latest_by_task: dict[str, dict] = {}
+    try:
+        for event in emitter.fetch_all(type_="task.updated"):
+            data = event.data
+            task_id = data.get("task_id", "")
+            if task_id in join.child_task_ids:
+                latest_by_task[task_id] = data
+    finally:
+        emitter.close()
+
+    lines = [
+        f"## {description}",
+        "",
+        f"Parent job: {join.parent_job_id}",
+    ]
+    if join.parent_summary:
+        lines.extend(["", "### Parent Summary", join.parent_summary])
+
+    lines.extend(["", "### Child Task States"])
+    for task_id in join.child_task_ids:
+        data = latest_by_task.get(task_id, {})
+        status = data.get("status", "unknown")
+        summary = data.get("summary", "(no summary yet)")
+        lines.append(f"- {task_id}: {status} - {summary}")
+
+    return "\n".join(lines)

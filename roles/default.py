@@ -10,6 +10,7 @@ role = RoleDefinition(
     prompt="prompts/default.md",
     contexts=[
         {"type": "task_description"},
+        {"type": "join_context"},
         {"type": "file_tree", "max_files": 100, "exclude": [".git", "__pycache__", ".venv", "*.pyc"]},
         {"type": "version_history", "limit": 5},
     ],
