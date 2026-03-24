@@ -10,15 +10,16 @@ from palimpsest.runtime.tools import tool, ToolResult
 
 
 @tool
-def task_complete(summary: str, status: str = "complete") -> ToolResult:
-    """Signal that the task is complete. Provide a summary and status.
+def task_complete(summary: str) -> ToolResult:
+    """Signal that your work on exactly this job is complete, providing a summary.
+    
+    This will end your current interaction loop.
 
     Args:
-        summary: Brief summary of what was accomplished.
-        status: One of complete, failed, in_progress, blocked, needs_review.
+        summary: Brief summary of what was accomplished in this job.
     """
     return ToolResult(
         success=True,
-        output=f"[{status}] {summary}",
+        output=f"[complete] {summary}",
         terminal=True,
     )
