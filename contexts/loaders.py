@@ -23,12 +23,12 @@ def _latest_child_task_states(job_config: JobConfig, child_task_ids: list[str]) 
     emitter = EventEmitter(job_config.eventstore)
     latest_by_task: dict[str, dict] = {}
     try:
-        for ev_type in ("task.completed", "task.failed", "task.partial", "task.cancelled", "task.eval_failed"):
+        for ev_type in ("supervisor.task.completed", "supervisor.task.failed", "supervisor.task.partial", "supervisor.task.cancelled", "supervisor.task.eval_failed"):
             for event in emitter.fetch_all(type_=ev_type):
                 data = dict(event.data)
                 task_id = data.get("task_id", "")
                 if task_id in child_task_ids:
-                    data["status"] = "eval_failed" if ev_type == "task.eval_failed" else ev_type.split(".")[1]
+                    data["status"] = "eval_failed" if ev_type == "supervisor.task.eval_failed" else ev_type.split(".")[2]
                     latest_by_task[task_id] = data
     finally:
         emitter.close()
@@ -156,9 +156,11 @@ def available_roles(
         f"Team: {team.name}",
         team.description,
     ]
-    for role_name in team.roles:
+    worker_roles = list(getattr(team, "worker_roles", getattr(team, "roles", [])))
+    for role_name in worker_roles:
         try:
             role = role_manager.get_definition(role_name)
+            spec = role_manager.resolve(role_name)
         except Exception as exc:
             lines.extend(
                 [
@@ -169,12 +171,14 @@ def available_roles(
             )
             continue
 
-        tools = ", ".join(role.tools) if role.tools else "(no evo tools)"
+        tools = ", ".join(spec.tools) if spec.tools else "(no evo tools)"
         lines.extend(
             [
                 "",
                 f"### {role.name}",
                 role.description,
+                f"Capability: {role.min_capability or '(unspecified)'}",
+                f"Budget: min={role.min_cost:.2f}, recommended={role.recommended_cost:.2f}",
                 f"Tools: {tools}",
             ]
         )
@@ -234,7 +238,7 @@ def job_trace(job_config: JobConfig, description: str = "Job Execution Trace") -
             if job_id and data.get("task_id", "") == task_id:
                 launched_by_job[job_id] = data
 
-        for ev_type in ("job.completed", "job.failed", "job.cancelled"):
+        for ev_type in ("agent.job.completed", "agent.job.failed", "agent.job.cancelled"):
             for event in emitter.fetch_all(type_=ev_type):
                 data = dict(event.data)
                 job_id = data.get("job_id", "")
