@@ -7,6 +7,7 @@ from palimpsest.runtime import RoleDefinition
 
 role = RoleDefinition(
     name="default",
+    description="General-purpose coding role for straightforward implementation tasks",
     prompt="prompts/default.md",
     contexts=[
         {"type": "task_description"},

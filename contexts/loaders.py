@@ -13,6 +13,7 @@ from yoitsu_contracts.client import EventEmitter
 
 from palimpsest.config import JobConfig
 from palimpsest.runtime.contexts import context_provider
+from palimpsest.runtime.roles import RoleManager, TeamManager
 
 
 @context_provider("task_description")
@@ -85,7 +86,7 @@ def join_context(job_config: JobConfig, description: str = "Join Context") -> st
     latest_by_task: dict[str, dict] = {}
     child_task_ids = list(join.child_task_ids if join else eval_ctx.child_task_ids)
     try:
-        for ev_type in ("task.completed", "task.failed", "task.cancelled", "task.eval_failed"):
+        for ev_type in ("task.completed", "task.failed", "task.partial", "task.cancelled", "task.eval_failed"):
             for event in emitter.fetch_all(type_=ev_type):
                 data = dict(event.data)
                 task_id = data.get("task_id", "")
@@ -129,4 +130,118 @@ def join_context(job_config: JobConfig, description: str = "Join Context") -> st
             structural = result.get("structural") or {}
             lines.append(f"  semantic={semantic}, structural={structural}")
 
+    return "\n".join(lines)
+
+
+@context_provider("available_roles")
+def available_roles(
+    evo_root: str,
+    job_config: JobConfig,
+    description: str = "Available Roles",
+) -> str:
+    team_manager = TeamManager(evo_root)
+    role_manager = RoleManager(evo_root)
+    team = team_manager.resolve(job_config.team or "default")
+
+    lines = [
+        f"## {description}",
+        "",
+        f"Team: {team.name}",
+        team.description,
+    ]
+    for role_name in team.roles:
+        role = role_manager._load_role(role_name)
+        tools = ", ".join(role.tools) if role.tools else "(no evo tools)"
+        lines.extend(
+            [
+                "",
+                f"### {role.name}",
+                role.description,
+                f"Tools: {tools}",
+            ]
+        )
+    return "\n".join(lines)
+
+
+@context_provider("eval_context")
+def eval_context(job_config: JobConfig, description: str = "Evaluation Context") -> str:
+    eval_cfg = job_config.context.eval
+    if eval_cfg is None:
+        return ""
+
+    lines = [f"## {description}"]
+    if eval_cfg.goal:
+        lines.extend(["", "### Goal", eval_cfg.goal])
+    if eval_cfg.deliverables:
+        lines.extend(["", "### Deliverables"])
+        for item in eval_cfg.deliverables:
+            lines.append(f"- {item}")
+    if eval_cfg.criteria:
+        lines.extend(["", "### Verification Criteria"])
+        for item in eval_cfg.criteria:
+            lines.append(f"- {item}")
+    if eval_cfg.structural:
+        lines.extend(["", "### Structural Verdict", str(eval_cfg.structural)])
+    if eval_cfg.child_task_ids:
+        lines.extend(["", "### Child Tasks"])
+        for task_id in eval_cfg.child_task_ids:
+            lines.append(f"- {task_id}")
+    return "\n".join(lines)
+
+
+@context_provider("job_trace")
+def job_trace(job_config: JobConfig, description: str = "Job Execution Trace") -> str:
+    eval_cfg = job_config.context.eval
+    task_id = eval_cfg.task_id if eval_cfg is not None else job_config.task_id
+    if not task_id:
+        return ""
+
+    emitter = EventEmitter(job_config.eventstore)
+    trace_rows: list[tuple[str, str, str, str, str]] = []
+    try:
+        launched_by_job: dict[str, dict] = {}
+        for event in emitter.fetch_all(type_="supervisor.job.launched"):
+            data = dict(event.data)
+            job_id = data.get("job_id", "")
+            if job_id and data.get("task_id", "") == task_id:
+                launched_by_job[job_id] = data
+
+        for ev_type in ("job.completed", "job.failed", "job.cancelled"):
+            for event in emitter.fetch_all(type_=ev_type):
+                data = dict(event.data)
+                job_id = data.get("job_id", "")
+                if not job_id or data.get("task_id", "") != task_id:
+                    continue
+                launch = launched_by_job.get(job_id, {})
+                summary = (
+                    str(data.get("summary") or data.get("error") or data.get("reason") or "").strip()
+                    or "(no summary)"
+                )
+                trace_rows.append(
+                    (
+                        job_id,
+                        str(launch.get("role", "")),
+                        ev_type.split(".")[1],
+                        summary,
+                        str(data.get("git_ref") or ""),
+                    )
+                )
+    finally:
+        emitter.close()
+
+    lines = [f"## {description}"]
+    if not trace_rows:
+        lines.extend(["", "(No completed job trace available yet)"])
+        return "\n".join(lines)
+
+    for job_id, role, status, summary, git_ref in trace_rows:
+        lines.extend(
+            [
+                "",
+                f"- {job_id}",
+                f"  role={role or 'unknown'} status={status}",
+                f"  summary={summary}",
+                f"  git_ref={git_ref or '(none)'}",
+            ]
+        )
     return "\n".join(lines)
