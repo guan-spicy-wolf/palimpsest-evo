@@ -8,8 +8,9 @@ role = RoleDefinition(
         {"type": "task_description"},
         {"type": "eval_context"},
         {"type": "job_trace"},
+        # Keep join_context so evaluator can inspect child verdict detail, not only IDs.
         {"type": "join_context"},
-        {"type": "file_tree", "max_files": 200, "exclude": [".git", "__pycache__", ".venv", "*.pyc"]},
+        {"type": "file_tree", "max_files": 200, "exclude": [".git", "__pycache__", ".venv"]},
     ],
     tools=[
         "read_file",

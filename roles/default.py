@@ -12,7 +12,7 @@ role = RoleDefinition(
     contexts=[
         {"type": "task_description"},
         {"type": "join_context"},
-        {"type": "file_tree", "max_files": 100, "exclude": [".git", "__pycache__", ".venv", "*.pyc"]},
+        {"type": "file_tree", "max_files": 100, "exclude": [".git", "__pycache__", ".venv"]},
         {"type": "version_history", "limit": 5},
     ],
     tools=[

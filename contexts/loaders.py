@@ -16,6 +16,25 @@ from palimpsest.runtime.contexts import context_provider
 from palimpsest.runtime.roles import RoleManager, TeamManager
 
 
+def _latest_child_task_states(job_config: JobConfig, child_task_ids: list[str]) -> dict[str, dict]:
+    if not child_task_ids:
+        return {}
+
+    emitter = EventEmitter(job_config.eventstore)
+    latest_by_task: dict[str, dict] = {}
+    try:
+        for ev_type in ("task.completed", "task.failed", "task.partial", "task.cancelled", "task.eval_failed"):
+            for event in emitter.fetch_all(type_=ev_type):
+                data = dict(event.data)
+                task_id = data.get("task_id", "")
+                if task_id in child_task_ids:
+                    data["status"] = "eval_failed" if ev_type == "task.eval_failed" else ev_type.split(".")[1]
+                    latest_by_task[task_id] = data
+    finally:
+        emitter.close()
+    return latest_by_task
+
+
 @context_provider("task_description")
 def task_description(task: str, description: str = "Task Description") -> str:
     """Render the primary task description."""
@@ -82,20 +101,8 @@ def join_context(job_config: JobConfig, description: str = "Join Context") -> st
     if (join is None or not join.child_task_ids) and eval_ctx is None:
         return ""
 
-    emitter = EventEmitter(job_config.eventstore)
-    latest_by_task: dict[str, dict] = {}
     child_task_ids = list(join.child_task_ids if join else eval_ctx.child_task_ids)
-    try:
-        for ev_type in ("task.completed", "task.failed", "task.partial", "task.cancelled", "task.eval_failed"):
-            for event in emitter.fetch_all(type_=ev_type):
-                data = dict(event.data)
-                task_id = data.get("task_id", "")
-                if task_id in child_task_ids:
-                    # Determine status from event type suffix
-                    data["status"] = "eval_failed" if ev_type == "task.eval_failed" else ev_type.split(".")[1]
-                    latest_by_task[task_id] = data
-    finally:
-        emitter.close()
+    latest_by_task = _latest_child_task_states(job_config, child_task_ids)
 
     lines = [
         f"## {description}",
@@ -150,7 +157,18 @@ def available_roles(
         team.description,
     ]
     for role_name in team.roles:
-        role = role_manager._load_role(role_name)
+        try:
+            role = role_manager.get_definition(role_name)
+        except Exception as exc:
+            lines.extend(
+                [
+                    "",
+                    f"### {role_name}",
+                    f"[Unavailable role definition: {exc}]",
+                ]
+            )
+            continue
+
         tools = ", ".join(role.tools) if role.tools else "(no evo tools)"
         lines.extend(
             [
@@ -184,8 +202,18 @@ def eval_context(job_config: JobConfig, description: str = "Evaluation Context")
         lines.extend(["", "### Structural Verdict", str(eval_cfg.structural)])
     if eval_cfg.child_task_ids:
         lines.extend(["", "### Child Tasks"])
+        latest_by_task = _latest_child_task_states(job_config, eval_cfg.child_task_ids)
         for task_id in eval_cfg.child_task_ids:
-            lines.append(f"- {task_id}")
+            data = latest_by_task.get(task_id, {})
+            status = data.get("status", "unknown")
+            summary = data.get("summary") or data.get("reason") or "(no summary yet)"
+            lines.append(f"- {task_id}: {status} - {summary}")
+        lines.extend(
+            [
+                "",
+                "Use `join_context` for the fuller child-state breakdown, including structural and semantic details.",
+            ]
+        )
     return "\n".join(lines)
 
 
