@@ -134,8 +134,27 @@ def join_context(job_config: JobConfig, description: str = "Join Context") -> st
         result = data.get("result")
         if isinstance(result, dict):
             semantic = (result.get("semantic") or {}).get("verdict", "unknown")
+            semantic_summary = (result.get("semantic") or {}).get("summary", "")
+            criteria_results = (result.get("semantic") or {}).get("criteria_results") or []
             structural = result.get("structural") or {}
             lines.append(f"  semantic={semantic}, structural={structural}")
+            if semantic_summary:
+                lines.append(f"  semantic_summary={semantic_summary}")
+            if criteria_results:
+                lines.append(f"  criteria_results={criteria_results}")
+            trace = result.get("trace") or []
+            if trace:
+                for entry in trace:
+                    if not isinstance(entry, dict):
+                        continue
+                    lines.append(
+                        "  trace: "
+                        f"job_id={entry.get('job_id', '')} "
+                        f"role={entry.get('role', '') or 'unknown'} "
+                        f"outcome={entry.get('outcome', '') or 'unknown'} "
+                        f"git_ref={entry.get('git_ref', '') or '(none)'} "
+                        f"summary={entry.get('summary', '') or '(no summary)'}"
+                    )
 
     return "\n".join(lines)
 
