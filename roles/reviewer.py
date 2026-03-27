@@ -1,4 +1,4 @@
-from palimpsest.runtime import JobSpec, role
+from palimpsest.runtime import JobSpec, context_spec, git_publication, role, workspace_config
 
 
 @role(
@@ -12,15 +12,17 @@ from palimpsest.runtime import JobSpec, role
 )
 def reviewer_role() -> JobSpec:
     return JobSpec(
-        prompt="prompts/default.md",
-        context_template={
-            "sections": [
+        workspace_fn=workspace_config(),
+        context_fn=context_spec(
+            "prompts/default.md",
+            [
                 {"type": "task_description"},
                 {"type": "join_context"},
                 {"type": "file_tree", "max_files": 150, "exclude": [".git", "__pycache__", ".venv"]},
                 {"type": "version_history", "limit": 10},
-            ]
-        },
+            ],
+        ),
+        publication_fn=git_publication(),
         tools=[
             "read_file",
             "list_files",

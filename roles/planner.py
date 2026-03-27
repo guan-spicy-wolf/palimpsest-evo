@@ -1,4 +1,4 @@
-from palimpsest.runtime import JobSpec, role
+from palimpsest.runtime import JobSpec, context_spec, git_publication, role, workspace_config
 
 
 @role(
@@ -12,15 +12,17 @@ from palimpsest.runtime import JobSpec, role
 )
 def planner_role() -> JobSpec:
     return JobSpec(
-        prompt="prompts/planner.md",
-        context_template={
-            "sections": [
+        workspace_fn=workspace_config(new_branch=False),
+        context_fn=context_spec(
+            "prompts/planner.md",
+            [
                 {"type": "task_description"},
                 {"type": "available_roles"},
                 {"type": "file_tree", "max_files": 200, "exclude": [".git", "__pycache__", ".venv"]},
                 {"type": "version_history", "limit": 10},
-            ]
-        },
+            ],
+        ),
+        publication_fn=git_publication(strategy="skip"),
         tools=[
             "read_file",
             "list_files",
