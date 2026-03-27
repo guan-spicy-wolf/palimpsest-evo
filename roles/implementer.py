@@ -10,7 +10,7 @@ from palimpsest.runtime import JobSpec, context_spec, git_publication, role, wor
     recommended_cost=0.80,
     min_capability="reasoning_medium",
 )
-def implementer_role() -> JobSpec:
+def implementer_role(**params) -> JobSpec:
     return JobSpec(
         workspace_fn=workspace_config(),
         context_fn=context_spec(
