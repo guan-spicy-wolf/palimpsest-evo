@@ -22,13 +22,39 @@ def _latest_child_task_states(job_config: JobConfig, child_task_ids: list[str]) 
 
     emitter = EventEmitter(job_config.eventstore)
     latest_by_task: dict[str, dict] = {}
+    launched_by_job: dict[str, dict] = {}
     try:
+        for event in emitter.fetch_all(type_="supervisor.job.launched"):
+            data = dict(event.data)
+            task_id = data.get("task_id", "")
+            job_id = data.get("job_id", "")
+            if task_id in child_task_ids and job_id:
+                launched_by_job[job_id] = data
+
         for ev_type in ("supervisor.task.completed", "supervisor.task.failed", "supervisor.task.partial", "supervisor.task.cancelled", "supervisor.task.eval_failed"):
             for event in emitter.fetch_all(type_=ev_type):
                 data = dict(event.data)
                 task_id = data.get("task_id", "")
                 if task_id in child_task_ids:
                     data["status"] = "eval_failed" if ev_type == "supervisor.task.eval_failed" else ev_type.split(".")[2]
+                    result = data.get("result")
+                    if isinstance(result, dict):
+                        trace = result.get("trace")
+                        if isinstance(trace, list):
+                            enriched_trace = []
+                            for entry in trace:
+                                if not isinstance(entry, dict):
+                                    enriched_trace.append(entry)
+                                    continue
+                                launch = launched_by_job.get(str(entry.get("job_id", "")), {})
+                                merged = dict(entry)
+                                if launch.get("repo") and not merged.get("repo"):
+                                    merged["repo"] = launch["repo"]
+                                init_branch = str(launch.get("init_branch", "") or "")
+                                if init_branch and not merged.get("base_branch"):
+                                    merged["base_branch"] = init_branch
+                                enriched_trace.append(merged)
+                            result["trace"] = enriched_trace
                     latest_by_task[task_id] = data
     finally:
         emitter.close()
@@ -143,6 +169,23 @@ def join_context(job_config: JobConfig, description: str = "Join Context") -> st
             if criteria_results:
                 lines.append(f"  criteria_results={criteria_results}")
             trace = result.get("trace") or []
+            publication_target = next(
+                (
+                    entry
+                    for entry in trace
+                    if isinstance(entry, dict) and entry.get("git_ref") and entry.get("repo")
+                ),
+                None,
+            )
+            if isinstance(publication_target, dict):
+                git_ref = str(publication_target.get("git_ref", "") or "")
+                head_branch = git_ref.split(":", 1)[0].strip() if ":" in git_ref else ""
+                lines.append(
+                    "  publication_target: "
+                    f"repo={publication_target.get('repo', '') or '(none)'} "
+                    f"base_branch={publication_target.get('base_branch', '') or '(none)'} "
+                    f"head_branch={head_branch or '(none)'}"
+                )
             if trace:
                 for entry in trace:
                     if not isinstance(entry, dict):
@@ -152,6 +195,8 @@ def join_context(job_config: JobConfig, description: str = "Join Context") -> st
                         f"job_id={entry.get('job_id', '')} "
                         f"role={entry.get('role', '') or 'unknown'} "
                         f"outcome={entry.get('outcome', '') or 'unknown'} "
+                        f"repo={entry.get('repo', '') or '(none)'} "
+                        f"base_branch={entry.get('base_branch', '') or '(none)'} "
                         f"git_ref={entry.get('git_ref', '') or '(none)'} "
                         f"summary={entry.get('summary', '') or '(no summary)'}"
                     )

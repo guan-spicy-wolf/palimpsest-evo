@@ -40,6 +40,7 @@ def planner_role(**params) -> JobSpec:
         publication_fn=git_publication(strategy="skip"),
         tools=[
             "spawn",
+            "create_pr",
             "read_file",
             "list_files",
         ],
