@@ -13,7 +13,7 @@ from palimpsest.runtime import JobSpec, context_spec, git_publication, role, wor
 )
 def evaluator_role(**params) -> JobSpec:
     return JobSpec(
-        workspace_fn=workspace_config(new_branch=False),
+        preparation_fn=workspace_config(new_branch=False),
         context_fn=context_spec(
             "prompts/evaluator.md",
             [

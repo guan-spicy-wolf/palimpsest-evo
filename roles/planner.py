@@ -36,7 +36,7 @@ def _planner_context(mode: str):
 def planner_role(**params) -> JobSpec:
     mode = str(params.get("mode") or "initial")
     return JobSpec(
-        workspace_fn=workspace_config(new_branch=False),
+        preparation_fn=workspace_config(new_branch=False),
         context_fn=_planner_context(mode),
         publication_fn=git_publication(strategy="skip"),
         tools=[
