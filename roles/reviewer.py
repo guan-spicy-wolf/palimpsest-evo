@@ -8,6 +8,7 @@ from palimpsest.runtime import JobSpec, context_spec, git_publication, role, wor
     role_type="worker",
     min_cost=0.08,
     recommended_cost=0.40,
+    max_cost=1.00,  # ADR-0004 D1a
     min_capability="reasoning_medium",
 )
 def reviewer_role(**params) -> JobSpec:

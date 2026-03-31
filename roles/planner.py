@@ -30,6 +30,7 @@ def _planner_context(mode: str):
     role_type="planner",
     min_cost=0.10,
     recommended_cost=0.40,
+    max_cost=0.50,  # ADR-0004 D1a: conservative ceiling for planning
     min_capability="reasoning_medium",
 )
 def planner_role(**params) -> JobSpec:
