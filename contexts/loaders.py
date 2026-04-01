@@ -210,9 +210,14 @@ def available_roles(
     job_config: JobConfig,
     description: str = "Available Roles",
 ) -> str:
-    team_manager = TeamManager(evo_root)
-    role_manager = RoleManager(evo_root)
-    team = team_manager.resolve(job_config.team or "default")
+    """Render available roles for the job's team.
+    
+    Per ADR-0011: Uses team-aware RoleManager for directory-based resolution.
+    """
+    team_name = job_config.team or "default"
+    team_manager = TeamManager(evo_root, team=team_name)
+    role_manager = RoleManager(evo_root, team=team_name)
+    team = team_manager.resolve(team_name)
 
     lines = [
         f"## {description}",
