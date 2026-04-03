@@ -83,10 +83,10 @@ In join mode:
 
 ## Spawn Requirements
 Each spawned task should include:
-- `prompt`: the concrete task
+- `goal`: the concrete task
 - `role`: one of the available team roles
 - `budget`: enough budget for the child to finish its own unit of work
-- `params.repo`
-- `params.branch` or `params.init_branch`
+- `repo`: target repository URL
+- `init_branch`: starting branch
 - `eval_spec.deliverables`: tangible outputs expected from the task
 - `eval_spec.criteria`: how the task should be verified

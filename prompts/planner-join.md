@@ -81,10 +81,10 @@ Rules:
 ## Spawn Requirements
 Only spawn if there is a concrete missing step that was not already completed.
 Each spawned task must still include:
-- `prompt`
+- `goal`
 - `role`
 - `budget`
-- `params.repo`
-- `params.branch` or `params.init_branch`
+- `repo`
+- `init_branch`
 - `eval_spec.deliverables`
 - `eval_spec.criteria`

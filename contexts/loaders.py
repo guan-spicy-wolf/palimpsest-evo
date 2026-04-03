@@ -7,9 +7,13 @@ They are dynamically loaded by the runtime's context stage.
 from __future__ import annotations
 
 import os
+import httpx
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from yoitsu_contracts.client import EventEmitter
+from yoitsu_contracts.env import api_key_headers
 
 from palimpsest.config import JobConfig
 from palimpsest.runtime.contexts import context_provider
@@ -432,5 +436,119 @@ def github_context(
                 author = c.get("author", "?")
                 body_preview = c.get("body", "")[:200]
                 lines.append(f"- @{author}: {body_preview}")
+
+    return "\n".join(lines) if len(lines) > 2 else ""
+
+
+@context_provider("observation_context")
+def observation_context(
+    job_config: JobConfig,
+    description: str = "Observation Context",
+    window_hours: int = 24,
+    metric_type: str | None = None,
+    role: str | None = None,
+) -> str:
+    """Render observation aggregation for self-optimization review.
+
+    This context provider queries Pasloe observation endpoints to provide
+    budget variance statistics.
+
+    Per ADR-0010: observation signals enable Review Task to identify
+    optimization targets with structured data and causal chain.
+
+    Args:
+        job_config: Job configuration with eventstore settings
+        description: Section header for context
+        window_hours: Time window for aggregation (from trigger params)
+        metric_type: Filter by metric type (budget_variance, preparation_failure, tool_retry)
+        role: Filter by role (from trigger params)
+    """
+    eventstore = job_config.eventstore
+    if not eventstore.url:
+        return ""
+
+    lines = [f"## {description}", "", f"Time window: last {window_hours} hours"]
+    if metric_type:
+        lines.append(f"Metric filter: {metric_type}")
+    if role:
+        lines.append(f"Role filter: {role}")
+
+    # Query observation endpoints
+    headers = api_key_headers(eventstore.api_key_env) if eventstore.api_key_env else {}
+    client = httpx.Client(
+        base_url=eventstore.url.rstrip("/"),
+        headers=headers,
+        timeout=10.0,
+    )
+
+    try:
+        # Route based on metric_type (per ADR-0010)
+        # Only budget_variance endpoints exist in Pasloe currently
+        if metric_type is None or metric_type == "budget_variance":
+            # Budget variance aggregation (with optional role filter)
+            agg_params = {"window_hours": window_hours}
+            if role:
+                agg_params["role"] = role
+
+            resp = client.get("/observation/budget_variance/aggregate", params=agg_params)
+            if resp.status_code == 200:
+                agg = resp.json()
+                lines.extend([
+                    "",
+                    "### Budget Variance Analysis",
+                    f"- Sample count: {agg.get('sample_count', 0)}",
+                    f"- Mean variance ratio: {agg.get('mean_variance_ratio', 0.0):.3f}",
+                    f"- Median variance ratio: {agg.get('median_variance_ratio', 0.0):.3f}",
+                    f"- Underestimate rate: {agg.get('underestimate_rate', 0.0):.1%}",
+                    f"- Overestimate rate: {agg.get('overestimate_rate', 0.0):.1%}",
+                    f"- Total estimated budget: {agg.get('total_estimated_budget', 0.0):.2f}",
+                    f"- Total actual cost: {agg.get('total_actual_cost', 0.0):.2f}",
+                ])
+
+                # Per-role breakdown (skip if we filtered by a specific role)
+                if not role:
+                    resp_roles = client.get("/observation/budget_variance/by_role", params={"window_hours": window_hours})
+                    if resp_roles.status_code == 200:
+                        role_stats = resp_roles.json()
+                        if role_stats:
+                            lines.extend(["", "#### By Role"])
+                            for rs in role_stats:
+                                lines.append(
+                                    f"- {rs.get('role', 'unknown')}: "
+                                    f"n={rs.get('sample_count', 0)}, "
+                                    f"mean_var={rs.get('mean_variance_ratio', 0.0):.3f}, "
+                                    f"est={rs.get('total_estimated_budget', 0.0):.2f}, "
+                                    f"actual={rs.get('total_actual_cost', 0.0):.2f}"
+                                )
+        elif metric_type in ("preparation_failure", "tool_retry"):
+            # Endpoints not yet implemented in Pasloe
+            # Per ADR-0010: these are advertised but routes don't exist yet
+            lines.extend([
+                "",
+                f"### {metric_type.replace('_', ' ').title()} Analysis",
+                "No data available: endpoint not yet implemented.",
+                "",
+                f"The {metric_type} metric type is recognized but Pasloe does not yet ",
+                "expose aggregation endpoints for this metric.",
+            ])
+        else:
+            # Unknown metric type - fail explicitly rather than silently
+            lines.extend([
+                "",
+                f"### Unknown Metric Type: {metric_type}",
+                f"WARNING: '{metric_type}' is not a recognized metric type.",
+                "",
+                "Supported metric types are:",
+                "- budget_variance (default)",
+                "- preparation_failure (endpoint not yet implemented)",
+                "- tool_retry (endpoint not yet implemented)",
+                "",
+                "No observation data loaded.",
+            ])
+
+    except httpx.HTTPError as exc:
+        lines.extend(["", f"[Error querying observation data: {exc}]"])
+    finally:
+        client.close()
 
     return "\n".join(lines) if len(lines) > 2 else ""
