@@ -346,3 +346,91 @@ def job_trace(job_config: JobConfig, description: str = "Job Execution Trace") -
             ]
         )
     return "\n".join(lines)
+
+
+@context_provider("github_context")
+def github_context(
+    job_config: JobConfig,
+    description: str = "GitHub Context",
+) -> str:
+    """Render GitHub PR/Issue context for reviewer role.
+
+    This context provider reads GitHub context from job_config.params
+    and formats it for the LLM to understand what it's reviewing.
+
+    The GitHub context is populated when external events (PR labeled,
+    Issue labeled) trigger tasks.
+    """
+    params = job_config.role_params or {}
+    github_data = params.get("github_context", {})
+
+    if not github_data:
+        return ""
+
+    lines = [f"## {description}", ""]
+
+    # PR context
+    pr = github_data.get("pr")
+    if pr:
+        lines.append("### Pull Request")
+        lines.append(f"- **Number**: #{pr.get('number', '?')}")
+        lines.append(f"- **URL**: {pr.get('url', '(unknown)')}")
+        lines.append(f"- **Title**: {pr.get('title', '(no title)')}")
+        lines.append(f"- **Author**: {pr.get('author', '(unknown)')}")
+        lines.append(f"- **Branch**: {pr.get('head_branch', '?')} -> {pr.get('base_branch', 'main')}")
+        lines.append(f"- **State**: {pr.get('state', 'open')}")
+        
+        files = pr.get("files", [])
+        if files:
+            lines.append(f"- **Changed Files** ({len(files)}):")
+            for f in files[:20]:  # Limit to 20 files
+                lines.append(f"  - {f}")
+            if len(files) > 20:
+                lines.append(f"  - ... and {len(files) - 20} more")
+        
+        body = pr.get("body", "")
+        if body:
+            lines.append("")
+            lines.append("**PR Description:**")
+            lines.append(body)
+
+        comments = pr.get("comments", [])
+        if comments:
+            lines.append("")
+            lines.append(f"**Comments** ({len(comments)}):")
+            for c in comments[:10]:  # Limit to 10 comments
+                author = c.get("author", "?")
+                body_preview = c.get("body", "")[:200]
+                lines.append(f"- @{author}: {body_preview}")
+
+    # Issue context
+    issue = github_data.get("issue")
+    if issue:
+        lines.append("")
+        lines.append("### Issue")
+        lines.append(f"- **Number**: #{issue.get('number', '?')}")
+        lines.append(f"- **URL**: {issue.get('url', '(unknown)')}")
+        lines.append(f"- **Title**: {issue.get('title', '(no title)')}")
+        lines.append(f"- **Author**: {issue.get('author', '(unknown)')}")
+        lines.append(f"- **State**: {issue.get('state', 'open')}")
+        
+        labels = issue.get("labels", [])
+        if labels:
+            lines.append(f"- **Labels**: {', '.join(labels)}")
+        
+        body = issue.get("body", "")
+        if body:
+            lines.append("")
+            lines.append("**Issue Description:**")
+            lines.append(body)
+
+        comments = issue.get("comments", [])
+        if comments:
+            lines.append("")
+            lines.append(f"**Comments** ({len(comments)}):")
+            for c in comments[:10]:
+                author = c.get("author", "?")
+                body_preview = c.get("body", "")[:200]
+                lines.append(f"- @{author}: {body_preview}")
+
+    return "\n".join(lines) if len(lines) > 2 else ""

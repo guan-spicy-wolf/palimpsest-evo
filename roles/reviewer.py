@@ -17,6 +17,7 @@ def reviewer_role(**params) -> JobSpec:
         context_fn=context_spec(
             "prompts/default.md",
             [
+                {"type": "github_context"},  # GitHub PR/Issue context (if available)
                 {"type": "task_description"},
                 {"type": "join_context"},
                 {"type": "file_tree", "max_files": 150, "exclude": [".git", "__pycache__", ".venv"]},
