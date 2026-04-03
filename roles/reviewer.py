@@ -12,6 +12,11 @@ from palimpsest.runtime import JobSpec, context_spec, git_publication, role, wor
     min_capability="reasoning_medium",
 )
 def reviewer_role(**params) -> JobSpec:
+    """Review role for GitHub PR/Issue code review.
+
+    This role is for reviewing code changes and providing feedback.
+    For observation-based optimization proposals, use the optimizer role.
+    """
     return JobSpec(
         preparation_fn=workspace_config(),
         context_fn=context_spec(
